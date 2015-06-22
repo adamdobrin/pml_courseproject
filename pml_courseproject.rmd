@@ -1,6 +1,6 @@
 ---
-  title: "Practical Machine Learning Course Project"
-  output: html_document
+title: "Practical Machine Learning Course Project"
+output: pdf_document
 ---
   
 ## Background
@@ -15,7 +15,7 @@ The data for this project come from [this source](http://groupware.les.inf.puc-r
 
 ## Goal
 
-The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. This is a report describing how I built the model, how I used cross validation, what I think the expected out of sample error is, and why I made the choices you did. I will also use my prediction model to predict 20 different test cases. 
+The goal of this project is to predict the manner in which they did the exercise, which is the "classe" variable in the training set. This is a report detailing the building of the model, cross-validating and showing expected error, and using the model to predict 20 different test cases. 
 
 
 ## Building the Model
@@ -26,67 +26,45 @@ First, we set seed and load the data from the working directory and some package
 set.seed(101010)
 
 # Load the training and testing data
-pml_training <- read.csv("pml-training.csv", stringsAsFactors=FALSE)
-pml_testing <- read.csv("pml-testing.csv", stringsAsFactors=FALSE)
+pml_training <- read.csv("pml-training.csv", na.strings=c('NA', '', ' '))
+pml_testing <- read.csv("pml-testing.csv", na.strings=c('NA', '', ' '))
 
 # Load required packages
 require(caret)
 require(randomForest)
 ```
 
-Remove classe field and zero variance, header, NA-ful and correlated predictors:
+Remove new window records, prepare modeling and predicting data:
 ```{r}
-  # Pick up fields that have near zero variance
-  zv_fields <- nearZeroVar(pml_training)
-  
-  # Remove those fields from training and testing data
-  training_data <- pml_training[-zv_fields]
-  problem_data <- pml_testing[-zv_fields]
-  
-  # Remove the header fields (index, user name, timestamps, window definitions)
-  header_fields <- 1:6
-  training_data <- training_data[-header_fields]
-  problem_data <- problem_data[-header_fields]
-  
-  # Remove fields with NAs
-  na_fields <- which(sapply(training_data, function(x) sum(is.na(x)) > 0))
-  names(na_fields) <- rep(NULL, length(na_fields))
-  training_data <- training_data[-na_fields]
-  problem_data <- problem_data[-na_fields]
-  
-  # Save off classe data
-  classe_data <- training_data$classe
-  
-  # Remove classe data from training data
-  classe_field <- which(names(training_data) == "classe")
-  training_data <- training_data[-classe_field]
-  problem_data <- problem_data[-classe_field]
-  
-  # Remove correlated fields
-  co_fields <- findCorrelation(cor(training_data), cutoff = 0.8)
-  training_data <- training_data[-co_fields]
-  problem_data <- problem_data[-co_fields]
+  model_data <- pml_training[pml_training$new_window == 'no', ]
+  predict_data <- pml_testing
 ```
 
-Preprocess data and throw classe back on:
+Remove header and NA-ful predictors:
 ```{r}
-  training_pre <- cbind(predict(preProcess(training_data, 
-                                           method = c("center", "scale", "knnImpute")), 
-                                training_data), classe_data)
-  names(training_pre)[dim(training_pre)[2]] <- "classe"
+  # Remove the header fields (index, user name, timestamps, window definitions)
+  header_fields <- 1:7
+  model_data <- model_data[-header_fields]
+  predict_data <- predict_data[-header_fields]
+  
+  # Remove fields with NAs
+  na_fields <- which(sapply(model_data, function(x) sum(is.na(x)) > 0))
+  names(na_fields) <- rep(NULL, length(na_fields))
+  model_data <- model_data[-na_fields]
+  predict_data <- predict_data[-na_fields]
 ```
 
 Create training and testing sets from the training data and preprocess training data:
 ```{r}
   # Partition pml_training into model training and testing data
-  in_training <- createDataPartition(y = classe_data, p = .8, list = FALSE)
+  in_training <- createDataPartition(y = model_data$classe, p = .8, list = FALSE)
   
   # Pull in fully defined numeric fields (no username); we add classe back in later
-  training <- training_pre[in_training, ]
-  testing <- training_pre[-in_training, ]
+  training <- model_data[in_training, ]
+  testing <- model_data[-in_training, ]
 ```
 
-Then create model from training data and test against testing data:
+Create model from training data and test against testing data:
 ```{r}  
   # Create model from training data
   pred_model <- randomForest(classe ~ ., data = training)
@@ -98,9 +76,11 @@ Then create model from training data and test against testing data:
   print(table(testing_predictions, testing$classe))
 ```
 
+## Use Model
+
 Make predictions:
 ```{r}
-  problem_predictions <- predict(pred_model, problem_data)
+  predictions <- predict(pred_model, predict_data)
 ```
 
 Write predictions to file:
@@ -113,7 +93,5 @@ write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
 }
 }
 
-pml_write_files(problem_predictions)
+pml_write_files(predictions)
 ```
-
-

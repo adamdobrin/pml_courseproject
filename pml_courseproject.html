@@ -75,7 +75,7 @@ img {
 </div>
 <div id="goal" class="section level2">
 <h2>Goal</h2>
-<p>The goal of this project is to predict the manner in which they did the exercise. This is the “classe” variable in the training set. This is a report describing how I built the model, how I used cross validation, what I think the expected out of sample error is, and why I made the choices you did. I will also use my prediction model to predict 20 different test cases.</p>
+<p>The goal of this project is to predict the manner in which they did the exercise, which is the “classe” variable in the training set. This is a report detailing the building of the model, cross-validating and showing expected error, and using the model to predict 20 different test cases.</p>
 </div>
 <div id="building-the-model" class="section level2">
 <h2>Building the Model</h2>
@@ -84,8 +84,8 @@ img {
 set.seed(101010)
 
 # Load the training and testing data
-pml_training &lt;- read.csv(&quot;pml-training.csv&quot;, stringsAsFactors=FALSE)
-pml_testing &lt;- read.csv(&quot;pml-testing.csv&quot;, stringsAsFactors=FALSE)
+pml_training &lt;- read.csv(&quot;pml-training.csv&quot;, na.strings=c('NA', '', ' '))
+pml_testing &lt;- read.csv(&quot;pml-testing.csv&quot;, na.strings=c('NA', '', ' '))
 
 # Load required packages
 require(caret)</code></pre>
@@ -96,50 +96,28 @@ require(caret)</code></pre>
 <pre><code>## Loading required package: randomForest
 ## randomForest 4.6-10
 ## Type rfNews() to see new features/changes/bug fixes.</code></pre>
-<p>Remove classe field and zero variance, header, NA-ful and correlated predictors:</p>
-<pre class="r"><code>  # Pick up fields that have near zero variance
-  zv_fields &lt;- nearZeroVar(pml_training)
-  
-  # Remove those fields from training and testing data
-  training_data &lt;- pml_training[-zv_fields]
-  problem_data &lt;- pml_testing[-zv_fields]
-  
-  # Remove the header fields (index, user name, timestamps, window definitions)
-  header_fields &lt;- 1:6
-  training_data &lt;- training_data[-header_fields]
-  problem_data &lt;- problem_data[-header_fields]
+<p>Remove new window records, prepare modeling and predicting data:</p>
+<pre class="r"><code>  model_data &lt;- pml_training[pml_training$new_window == 'no', ]
+  predict_data &lt;- pml_testing</code></pre>
+<p>Remove header and NA-ful predictors:</p>
+<pre class="r"><code>  # Remove the header fields (index, user name, timestamps, window definitions)
+  header_fields &lt;- 1:7
+  model_data &lt;- model_data[-header_fields]
+  predict_data &lt;- predict_data[-header_fields]
   
   # Remove fields with NAs
-  na_fields &lt;- which(sapply(training_data, function(x) sum(is.na(x)) &gt; 0))
+  na_fields &lt;- which(sapply(model_data, function(x) sum(is.na(x)) &gt; 0))
   names(na_fields) &lt;- rep(NULL, length(na_fields))
-  training_data &lt;- training_data[-na_fields]
-  problem_data &lt;- problem_data[-na_fields]
-  
-  # Save off classe data
-  classe_data &lt;- training_data$classe
-  
-  # Remove classe data from training data
-  classe_field &lt;- which(names(training_data) == &quot;classe&quot;)
-  training_data &lt;- training_data[-classe_field]
-  problem_data &lt;- problem_data[-classe_field]
-  
-  # Remove correlated fields
-  co_fields &lt;- findCorrelation(cor(training_data), cutoff = 0.8)
-  training_data &lt;- training_data[-co_fields]
-  problem_data &lt;- problem_data[-co_fields]</code></pre>
-<p>Preprocess data and throw classe back on:</p>
-<pre class="r"><code>  training_pre &lt;- cbind(predict(preProcess(training_data, 
-                                           method = c(&quot;center&quot;, &quot;scale&quot;, &quot;knnImpute&quot;)), 
-                                training_data), classe_data)
-  names(training_pre)[dim(training_pre)[2]] &lt;- &quot;classe&quot;</code></pre>
+  model_data &lt;- model_data[-na_fields]
+  predict_data &lt;- predict_data[-na_fields]</code></pre>
 <p>Create training and testing sets from the training data and preprocess training data:</p>
 <pre class="r"><code>  # Partition pml_training into model training and testing data
-  in_training &lt;- createDataPartition(y = classe_data, p = .8, list = FALSE)
+  in_training &lt;- createDataPartition(y = model_data$classe, p = .8, list = FALSE)
   
   # Pull in fully defined numeric fields (no username); we add classe back in later
-  training &lt;- training_pre[in_training, ]
-  testing &lt;- training_pre[-in_training, ]</code></pre>
-<p>Then create model from training data and test against testing data:</p>
+  training &lt;- model_data[in_training, ]
+  testing &lt;- model_data[-in_training, ]</code></pre>
+<p>Create model from training data and test against testing data:</p>
 <pre class="r"><code>  # Create model from training data
   pred_model &lt;- randomForest(classe ~ ., data = training)
   
@@ -150,13 +128,16 @@ require(caret)</code></pre>
   print(table(testing_predictions, testing$classe))</code></pre>
 <pre><code>##                    
 ## testing_predictions    A    B    C    D    E
-##                   A 1114    2    0    0    0
-##                   B    1  756    7    0    0
-##                   C    0    1  677    5    0
-##                   D    0    0    0  638    1
-##                   E    1    0    0    0  720</code></pre>
+##                   A 1094    5    0    0    0
+##                   B    0  735    2    0    0
+##                   C    0    3  667    3    0
+##                   D    0    0    1  626    0
+##                   E    0    0    0    0  705</code></pre>
+</div>
+<div id="use-model" class="section level2">
+<h2>Use Model</h2>
 <p>Make predictions:</p>
-<pre class="r"><code>  problem_predictions &lt;- predict(pred_model, problem_data)</code></pre>
+<pre class="r"><code>  predictions &lt;- predict(pred_model, predict_data)</code></pre>
 <p>Write predictions to file:</p>
 <pre class="r"><code>pml_write_files = function(x){
 n = length(x)
@@ -166,7 +147,7 @@ write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
 }
 }
 
-pml_write_files(problem_predictions)</code></pre>
+pml_write_files(predictions)</code></pre>
 </div>
 
 
